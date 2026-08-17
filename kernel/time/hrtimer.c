@@ -2017,6 +2017,31 @@ void hrtimer_quiesce_cpu(void *cpup)
 	__migrate_hrtimers(*(int *)cpup, false);
 }
 
+int hrtimers_cpu_dying(unsigned int dying_cpu)
+{
+	struct hrtimer_cpu_base *old_base, *new_base;
+	int i, ncpu = cpumask_first(cpu_active_mask);
+
+	tick_cancel_sched_timer(dying_cpu);
+
+	old_base = this_cpu_ptr(&hrtimer_bases);
+	new_base = &per_cpu(hrtimer_bases, ncpu);
+
+	raw_spin_lock(&old_base->lock);
+	raw_spin_lock_nested(&new_base->lock, SINGLE_DEPTH_NESTING);
+
+	for (i = 0; i < HRTIMER_MAX_CLOCK_BASES; i++)
+		migrate_hrtimer_list(&old_base->clock_base[i],
+				     &new_base->clock_base[i], true);
+
+	hrtimer_update_softirq_timer(new_base, false);
+	raw_spin_unlock(&new_base->lock);
+	old_base->online = 0;
+	raw_spin_unlock(&old_base->lock);
+
+	return 0;
+}
+
 #endif /* CONFIG_HOTPLUG_CPU */
 
 void __init hrtimers_init(void)
