@@ -1390,8 +1390,8 @@ static void qmi_rmnet_check_stats_2(struct work_struct *work)
 
 		num_bearers = sizeof(ps_bearer_id);
 		memset(ps_bearer_id, 0, sizeof(ps_bearer_id));
-		rmnet_prepare_ps_bearers(real_work->port, &num_bearers,
-					 ps_bearer_id);
+		qmi_rmnet_prepare_ps_bearers(real_work->port, &num_bearers,
+					     ps_bearer_id);
 
 		/* Enter powersave */
 		dfc_qmap_set_powersave(1, num_bearers, ps_bearer_id);

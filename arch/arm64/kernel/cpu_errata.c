@@ -345,6 +345,19 @@ void arm64_set_ssbd_mitigation(bool state)
 			asm volatile(SET_PSTATE_SSBS(0));
 		else
 			asm volatile(SET_PSTATE_SSBS(1));
+
+		/*
+		 * SSBS is self-synchronizing and is intended to affect
+		 * subsequent speculative instructions, but some CPUs can
+		 * speculate with a stale value of SSBS.
+		 *
+		 * Mitigate this with an unconditional speculation barrier, as
+		 * CPUs could mis-speculate branches and bypass a conditional
+		 * barrier.
+		 */
+		if (IS_ENABLED(CONFIG_ARM64_ERRATUM_3194386))
+			spec_bar();
+
 		return;
 	}
 
@@ -734,40 +747,85 @@ static const struct midr_range arm64_workaround_845719_cpus[] = {
 };
 
 #endif
+#ifdef CONFIG_ARM64_WORKAROUND_REPEAT_TLBI
+static const struct arm64_cpu_capabilities arm64_repeat_tlbi_list[] = {
+#ifdef CONFIG_QCOM_FALKOR_ERRATUM_1009
+	{
+		ERRATA_MIDR_REV(MIDR_QCOM_FALKOR_V1, 0, 0)
+	},
+	{
+		.midr_range.model = MIDR_QCOM_KRYO,
+		.matches = is_kryo_midr,
+	},
+#endif
+#ifdef CONFIG_ARM64_ERRATUM_1286807
+	{
+		ERRATA_MIDR_RANGE(MIDR_CORTEX_A76, 0, 0, 3, 0),
+	},
+#endif
+#ifdef CONFIG_ARM64_ERRATUM_4118414
+	{
+		ERRATA_MIDR_RANGE_LIST(((const struct midr_range[]) {
+			MIDR_ALL_VERSIONS(MIDR_C1_PREMIUM),
+			MIDR_ALL_VERSIONS(MIDR_C1_ULTRA),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A76),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A76AE),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A77),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A78),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A78AE),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A78C),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A710),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_X1),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_X1C),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_X2),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_X3),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_X4),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_X925),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N1),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V1),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V3),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V3AE),
+			{}
+		})),
+	},
+#endif
+	{}
+};
+#endif
 
 #ifdef CONFIG_ARM64_ERRATUM_1742098
-
 static struct midr_range broken_aarch32_aes[] = {
 	MIDR_RANGE(MIDR_CORTEX_A57, 0, 1, 0xf, 0xf),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A72),
 	{},
 };
-
 #endif
 
 #ifdef CONFIG_ARM64_ERRATUM_3194386
 static const struct midr_range erratum_spec_ssbs_list[] = {
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_A76),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_A77),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_A78),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_A78C),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_A710),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_A715),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_A720),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_A725),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_X1),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_X1C),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_X2),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_X3),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_X4),
-    MIDR_ALL_VERSIONS(MIDR_CORTEX_X925),
-    MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N1),
-    MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2),
-    MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N3),
-    MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V1),
-    MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2),
-    MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V3),
-    {}
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A76),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A77),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A78),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A78C),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A710),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A715),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A720),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A725),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_X1),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_X1C),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_X2),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_X3),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_X4),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_X925),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N1),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N3),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V1),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2),
+	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V3),
+	{}
 };
 #endif
 
@@ -902,11 +960,13 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.matches = is_kryo_midr,
 	},
 #endif
-#ifdef CONFIG_QCOM_FALKOR_ERRATUM_1009
+#ifdef CONFIG_ARM64_WORKAROUND_REPEAT_TLBI
 	{
-		.desc = "Qualcomm Technologies Falkor erratum 1009",
+		.desc = "Broken broadcast TLBI completion",
 		.capability = ARM64_WORKAROUND_REPEAT_TLBI,
-		ERRATA_MIDR_REV(MIDR_QCOM_FALKOR_V1, 0, 0),
+		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
+		.matches = multi_entry_cap_matches,
+		.match_list = arm64_repeat_tlbi_list,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_858921
@@ -937,13 +997,6 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.matches = has_ssbd_mitigation,
 		.midr_range_list = arm64_ssb_cpus,
 	},
-	{
-		.desc = "Spectre-BHB",
-		.capability = ARM64_SPECTRE_BHB,
-		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
-		.matches = is_spectre_bhb_affected,
-		.cpu_enable = spectre_bhb_enable_mitigation,
-	},
 #ifdef CONFIG_ARM64_ERRATUM_1188873
 	{
 		.desc = "ARM erratum 1188873",
@@ -951,6 +1004,13 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_RANGE_LIST(arm64_workaround_1188873_cpus),
 	},
 #endif
+	{
+		.desc = "Spectre-BHB",
+		.capability = ARM64_SPECTRE_BHB,
+		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
+		.matches = is_spectre_bhb_affected,
+		.cpu_enable = spectre_bhb_enable_mitigation,
+	},
 #ifdef CONFIG_ARM64_ERRATUM_1463225
 	{
 		.desc = "ARM erratum 1463225",
@@ -994,13 +1054,12 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_3194386
-    {
-        .desc = "SSBS not fully self-synchronizing",
-        .capability = ARM64_WORKAROUND_SPECULATIVE_SSBS,
-        ERRATA_MIDR_RANGE_LIST(erratum_spec_ssbs_list),
-    },
+	{
+		.desc = "SSBS not fully self-synchronizing",
+		.capability = ARM64_WORKAROUND_SPECULATIVE_SSBS,
+		ERRATA_MIDR_RANGE_LIST(erratum_spec_ssbs_list),
+	},
 #endif
-
 	{
 	}
 };
@@ -1044,6 +1103,23 @@ ssize_t cpu_show_spectre_v2(struct device *dev, struct device_attribute *attr,
 
 	if (__hardenbp_enab)
 		return sprintf(buf, "Mitigation: %s%s\n", v2_str, bhb_str);
+
+	return sprintf(buf, "Vulnerable\n");
+}
+
+ssize_t cpu_show_spec_store_bypass(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	if (__ssb_safe)
+		return sprintf(buf, "Not affected\n");
+
+	switch (ssbd_state) {
+	case ARM64_SSBD_KERNEL:
+	case ARM64_SSBD_FORCE_ENABLE:
+		if (IS_ENABLED(CONFIG_ARM64_SSBD))
+			return sprintf(buf,
+			    "Mitigation: Speculative Store Bypass disabled via prctl\n");
+	}
 
 	return sprintf(buf, "Vulnerable\n");
 }
@@ -1302,23 +1378,6 @@ static void kvm_setup_bhb_slot(const char *hyp_vecs_start)
 
 static void kvm_setup_bhb_slot(const char *hyp_vecs_start) { };
 #endif
-
-ssize_t cpu_show_spec_store_bypass(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	if (__ssb_safe)
-		return sprintf(buf, "Not affected\n");
-
-	switch (ssbd_state) {
-	case ARM64_SSBD_KERNEL:
-	case ARM64_SSBD_FORCE_ENABLE:
-		if (IS_ENABLED(CONFIG_ARM64_SSBD))
-			return sprintf(buf,
-			    "Mitigation: Speculative Store Bypass disabled via prctl\n");
-	}
-
-	return sprintf(buf, "Vulnerable\n");
-}
 
 void spectre_bhb_enable_mitigation(const struct arm64_cpu_capabilities *entry)
 {
