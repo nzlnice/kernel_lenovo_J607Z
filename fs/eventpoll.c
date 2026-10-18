@@ -42,6 +42,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/compat.h>
+#include <linux/time.h>
 #include <linux/rculist.h>
 #include <net/busy_poll.h>
 
@@ -2206,9 +2207,9 @@ SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
  * Implement the event wait interface for the eventpoll file. It is the kernel
  * part of the user space epoll_pwait(2).
  */
-SYSCALL_DEFINE6(epoll_pwait, int, epfd, struct epoll_event __user *, events,
-		int, maxevents, int, timeout, const sigset_t __user *, sigmask,
-		size_t, sigsetsize)
+static int do_epoll_pwait(int epfd, struct epoll_event __user *events,
+			  int maxevents, int timeout,
+			  const sigset_t __user *sigmask, size_t sigsetsize)
 {
 	int error;
 	sigset_t ksigmask, sigsaved;
@@ -2244,6 +2245,42 @@ SYSCALL_DEFINE6(epoll_pwait, int, epfd, struct epoll_event __user *, events,
 	}
 
 	return error;
+}
+
+SYSCALL_DEFINE6(epoll_pwait, int, epfd, struct epoll_event __user *, events,
+		int, maxevents, int, timeout, const sigset_t __user *, sigmask,
+		size_t, sigsetsize)
+{
+	return do_epoll_pwait(epfd, events, maxevents, timeout, sigmask, sigsetsize);
+}
+
+/*
+ * epoll_pwait2: like epoll_pwait, but with a struct timespec timeout.
+ *
+ * The upstream ABI uses nanosecond resolution.  The 4.19 epoll core still
+ * takes a millisecond timeout, so round the requested timeout up before
+ * handing it to do_epoll_pwait().
+ */
+SYSCALL_DEFINE6(epoll_pwait2, int, epfd, struct epoll_event __user *, events,
+		int, maxevents, const struct timespec __user *, timeout,
+		const sigset_t __user *, sigmask, size_t, sigsetsize)
+{
+	struct timespec ts;
+	long long timeout_ms = -1;
+
+	if (timeout) {
+		if (copy_from_user(&ts, timeout, sizeof(ts)))
+			return -EFAULT;
+		if (ts.tv_sec < 0 || ts.tv_nsec < 0 || ts.tv_nsec >= 1000000000L)
+			return -EINVAL;
+		timeout_ms = (long long)ts.tv_sec * 1000 +
+			     DIV_ROUND_UP(ts.tv_nsec, 1000000L);
+		if (timeout_ms > 2147483647LL)
+			timeout_ms = 2147483647LL;
+	}
+
+	return do_epoll_pwait(epfd, events, maxevents, (int)timeout_ms,
+			      sigmask, sigsetsize);
 }
 
 #ifdef CONFIG_COMPAT
